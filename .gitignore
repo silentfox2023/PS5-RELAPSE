@@ -1,0 +1,29 @@
+# ESP-IDF build outputs
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+sdkconfig.defaults.bak
+dependencies.lock
+
+# Precompiled firmware — 放到 GitHub Release
+bootloader.bin
+partition-table.bin
+*.bin
+!build_data/**
+
+# Archives
+*.zip
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# 本地 USB 串口检测
+.port
+
+# 临时
+.ps5ip

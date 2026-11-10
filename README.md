@@ -1,0 +1,188 @@
+# PS5 Relapse 随身越狱棒
+
+把一块 **ESP32-C3 / ESP32-S3** 开发板（4MB Flash 以上）变成一个便携 WiFi 热点，
+开机即可给 PS5 浏览器分发 [Relapse-Exploit](https://github.com/ntfargo/Relapse-Exploit) 网页利用链。
+支持 ESP32-C3（SuperMini / DevKitM-1 等）与 ESP32-S3，**同一份源码，无功能裁剪**。
+
+```
+PS5 浏览器 ──WiFi──> ESP32 (AP: 192.168.4.1)
+                      ├─ HTTP :8000 / (exploit 入口)
+                      ├─ HTTP :8000/manage (payload 管理页)
+                      └─ TCP 9021 推送 (elfldr)
+```
+
+## 目录结构
+
+| 路径 | 说明 |
+|---|---|
+| `main/app_main.cpp` | 固件主程序（WiFi AP + HTTP 服务器 + 管理页） |
+| `main/Kconfig.projbuild` | menuconfig 中的热点 SSID / 密码配置 |
+| `partitions.csv` | 分区表：NVS / phy_init / factory(1MB) / storage-LittleFS(2MB) |
+| `sdkconfig.defaults` | 默认配置（Flash=4MB, LWIP sockets=16, HTTPD 头=1KB） |
+| `build_data/` | exploit 网页资源（index.html / src / offsets / payloads） |
+| `scripts/pack_fs.ps1` | 从 Relapse-Exploit 仓库收集资源 + 生成 LittleFS 镜像 |
+| `tools/mklittlefs.exe` | 生成 LittleFS 镜像的 Windows 工具（已内置） |
+
+## 硬件要求
+
+- **ESP32-C3**（推荐）：SuperMini / DevKitM-1 / Air780E 等，**Flash ≥ 4MB**（无 PSRAM 也可）
+  - C3 有两种接法：原生 USB（USB-CDC）或外部 UART 桥（常见 SuperMini）
+- **ESP32-S3**：任意 4MB+ Flash 模块，带 PSRAM 则并行资源下载更稳
+- 一根能传数据的 USB 线
+- PS5（支持 Relapse 的固件版本 7.00 – 13.60，详见 exploit 仓库）
+
+分区表合计约 **3.1MB**（bootloader 0.2MB + 分区表 0.01MB + app 1MB + storage 2MB），
+4MB Flash 的模块放得下。更大的 8/16MB Flash 直接兼容，分区表不需要改。
+
+## 快速上手（直接烧录 Release 固件）
+
+不想从源码编译？下载 [GitHub Releases](../../releases) 里的预编译包，用 esptool 一次性烧入：
+
+### C3 板（SuperMini / DevKitM-1）
+
+```powershell
+python -m esptool --chip esp32c3 -p COM5 -b 460800 --before default_reset --after hard_reset `
+  write_flash 0x0     bootloader.bin `
+              0x8000  partition-table.bin `
+              0x10000 ps5_relapse_stick_c3.bin `
+              0x110000 littlefs.bin
+```
+
+### S3 板
+
+```powershell
+python -m esptool --chip esp32s3 -p COM5 -b 460800 --before default_reset --after hard_reset `
+  write_flash 0x0     bootloader.bin `
+              0x8000  partition-table.bin `
+              0x10000 ps5_relapse_stick_s3.bin `
+              0x110000 littlefs.bin
+```
+
+> **原生 USB-CDC C3 板**若 `--before default_reset` 进不了下载模式：按住 BOOT 键上电，
+> 然后改用 `--before no_reset`。外部 UART 桥的 SuperMini 直接烧即可。
+
+## 从源码构建
+
+### 1. 环境
+
+- [ESP-IDF v5.2+](https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32c3/get-started/)（Windows 推荐用 ESP-IDF 官方安装器）
+- 首次构建需要联网（`joltwallet/littlefs` 组件由 ESP-IDF 组件管理器自动拉取）
+- 本仓库已内置 `tools/mklittlefs.exe`，无需单独下载
+
+### 2. （可选）更新 exploit 资源
+
+仓库已附带一份打包好的 `build_data/` 与 `littlefs.bin`。若你想使用 Relapse-Exploit 的最新网页 / payload：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\pack_fs.ps1 -Repo "E:\Relapse-Exploit-main"
+```
+
+这会把上游仓库的 `index.html / src / offsets / payloads / LICENSE` 收集到 `build_data/`，
+再用 `mklittlefs.exe` 生成新的 `littlefs.bin`（2MB 分区）。
+
+> `littlefs.bin` 是纯数据镜像，**与芯片型号无关**，C3 / S3 通用。
+
+### 3. 编译
+
+```powershell
+# C3 板
+idf.py set-target esp32c3
+# 或 S3 板
+idf.py set-target esp32s3
+
+# 可选：修改热点 SSID / 密码（默认 PS5-RELAPSE / 12345678）
+idf.py menuconfig → PS5 Relapse Stick
+
+idf.py build
+```
+
+### 4. 烧写
+
+```powershell
+# 一键烧写固件 + 资源分区
+idf.py -p COM5 flash
+```
+
+或使用 esptool 分地址烧写（同"快速上手"章节）。
+
+## 烧录地址速查
+
+| 地址 | 文件 | 内容 |
+|---|---|---|
+| `0x0` | `build\bootloader\bootloader.bin` | 引导程序 |
+| `0x8000` | `build\partition_table\partition-table.bin` | 分区表 |
+| `0x10000` | `build\ps5_relapse_stick_c3.bin` / `_s3.bin` | 应用固件（1MB） |
+| `0x110000` | `littlefs.bin` | exploit 资源（2MB LittleFS） |
+
+- 只改了应用代码（重编译后）：只烧 `0x10000` 地址的 app bin
+- 只更新了 exploit 资源（重跑 pack_fs.ps1 后）：只烧 `0x110000 littlefs.bin`
+- 换 target（C3 ↔ S3）必须整组重烧（bootloader / app 指令集不同）
+
+## 使用步骤
+
+1. 上电，等待热点起来（约 2 秒）。日志会打印：
+   ```
+   AP up: SSID="PS5-RELAPSE" channel=1
+   ```
+2. PS5：**设定 → 网络 → 自定义 → WiFi**，连接 `PS5-RELAPSE`（密码 `12345678`）
+3. PS5 浏览器访问 **`http://192.168.4.1:8000/`**
+4. 页面会自动识别 PS5 固件版本（UA `PlayStation 5/x.xx`）并运行 Relapse 利用链
+   - WebKit 利用阶段可能需要多次刷新（属正常现象）
+   - 内核阶段如果 panic，PS5 会直接重启，重开浏览器即可
+5. 越狱成功后 elfldr 在 PS5 上监听 `:9021`，这时：
+   - PS5 IP 会被 ESP32 **自动记录**（谁打开了 exploit 入口页就记谁）
+   - 手机 / 电脑（同一热点）访问 **`http://192.168.4.1:8000/manage`** 进入管理页
+
+## 管理页 /manage
+
+嵌入在固件中的轻量管理界面（**不在 LittleFS 里**，重打包资源不影响）：
+
+- **上传自定义 payload**：选 ELF / bin 文件（单文件 ≤ 1MB）→ POST 到设备，存 `payloads_custom/`
+- **列表 / 删除**：显示文件名、大小、分区剩余空间，5 秒自动刷新
+- **发送到 PS5**：ESP32 作为 TCP 客户端把文件推给 `PS5_IP:9021`（elfldr），**不需要 PC 上的 nc**
+- **PS5 IP 自动记录**：打开过 exploit 入口页的设备即被识别，也可手动覆盖
+
+典型流程：
+```
+越狱成功 → 管理页上传 payload.elf → 点"发送到 PS5" → 完成
+```
+
+> ⚠️ 注意：重跑 `pack_fs.ps1` 并烧写 `0x110000` 会**覆盖整个 storage 分区**，
+> 已上传的自定义 payload 会丢失。建议先用 `scp` / `ps5-pkg` 工具把 payload 拉到 PC 再更新。
+> 管理页**没有鉴权**（个人热点场景），不要把设备暴露到公共网络。
+
+## FAQ / 故障排查
+
+| 现象 | 原因 / 处理 |
+|---|---|
+| 页面空白、控制台无输出 | `.js` 的 MIME 必须是 `application/javascript`（本固件已处理）；确认访问的是 `:8000` |
+| 报 `FW x.xx is not supported` | exploit 不支持该固件版本；或缓存了旧的 `offsets/`，硬刷新 PS5 浏览器（本固件已发 `no-store`） |
+| WebKit 阶段反复失败 | 属正常，Relapse 需要多次尝试；确保 PS5 信号满格 |
+| 大文件 `.elf` 下载失败 | 靠热点太近，或 LWIP socket 不够；固件已配 `CONFIG_LWIP_MAX_SOCKETS=16` |
+| 首次启动日志 `0/0 bytes used` | 忘记烧 `littlefs.bin`，烧写 `0x110000` 地址 |
+| 串口日志 `httpd start failed` | `max_open_sockets` 不够或 PSRAM 初始化失败；S3 板建议启用 PSRAM |
+| C3 SuperMini 烧不动 | 按住 BOOT 键上电，改用 `--before no_reset` |
+
+## 自定义热点 SSID / 密码
+
+```powershell
+idf.py menuconfig → PS5 Relapse Stick
+```
+
+默认值：SSID `PS5-RELAPSE` / 密码 `12345678`。密码需 ≥ 8 位（WPA2 要求）。
+
+## 更新 exploit 资源
+
+Relapse-Exploit 上游有新的网页 / payload 时：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\pack_fs.ps1 -Repo "E:\Relapse-Exploit-main"
+python -m esptool --chip esp32c3 -p COM5 -b 921600 write_flash 0x110000 littlefs.bin
+```
+
+**无需重新编译固件**（固件只是 HTTP 服务器，资源全在 LittleFS 里）。
+
+## 合规提示
+
+本工程仅用于**教育与安全研究**：请只在你拥有或获授权的 PS5 上使用。
+MIT 许可证要求保留上游 Relapse-Exploit 的 `LICENSE`，打包脚本已将其一并放入 LittleFS 文件系统。

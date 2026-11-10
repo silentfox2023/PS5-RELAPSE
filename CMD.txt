@@ -1,0 +1,1 @@
+esptool -b 460800 write-flash 0x0 bootloader.bin 0x8000 partition-table.bin 0x10000 ps5_relapse_stick_c3.bin 0x110000 littlefs.bin

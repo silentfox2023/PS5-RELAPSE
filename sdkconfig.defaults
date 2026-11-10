@@ -1,0 +1,8 @@
+# 分区表合计约 3.1 MB，4MB Flash 即可容纳（8/16MB 模块同样兼容）
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# 浏览器会并行拉取多个 ES Module，放宽 socket 上限
+CONFIG_LWIP_MAX_SOCKETS=16
+
+# 容忍较长的请求头（带 ?v= 时间戳的偏移表请求）
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024

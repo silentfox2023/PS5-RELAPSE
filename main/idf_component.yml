@@ -1,0 +1,3 @@
+## 通过 ESP-IDF 组件管理器自动拉取 LittleFS VFS 组件（需联网构建）
+dependencies:
+  joltwallet/littlefs: "~1.18"

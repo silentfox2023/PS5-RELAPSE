@@ -1,0 +1,15 @@
+menu "PS5 Relapse Stick"
+
+    config APP_SSID
+        string "AP SSID"
+        default "PS5-RELAPSE"
+        help
+            PS5 需要连接的 WiFi 热点名称。
+
+    config APP_PASS
+        string "AP password (8-63 chars)"
+        default "12345678"
+        help
+            WPA2 密码，至少 8 个字符。
+
+endmenu
