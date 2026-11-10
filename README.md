@@ -1,5 +1,7 @@
 # PS5 Relapse 随身越狱棒
 
+[English](README.en.md)
+
 把一块 **ESP32-C3 / ESP32-S3** 开发板（4MB Flash 以上）变成一个便携 WiFi 热点，
 开机即可给 PS5 浏览器分发 [Relapse-Exploit](https://github.com/ntfargo/Relapse-Exploit) 网页利用链。
 支持 ESP32-C3（SuperMini / DevKitM-1 等）与 ESP32-S3，**同一份源码，无功能裁剪**。
